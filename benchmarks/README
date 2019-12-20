@@ -1,0 +1,60 @@
+
+There are four folders in this package: 
+
+* bench1: The easiest benchmark set holds 27 sat cnf and 21 unsat cnf.
+          This folder has two sub-folders: one is sat and another is unsat.
+          The 27 sat cnf are in the sat folder, and the 21 unsat cnf are
+          in the unsat folder.
+
+* bench2: Kind of harder than bench1, and also has two sub-folders: one 
+          (named sat) contains 11 sat cnf and another one (named unsat)
+          contains 14 unsat cnf. 
+
+* bench3: The hardest benchmarks. It only contains five unsat cnf, and 
+          does not have a sub-folder.
+
+* groups: =You can build a folder for each group and put their 
+          folders in the 'groups' folder. For example, now we have one
+          group, called "group".
+
+-----------------
+
+How to test?
+
+Enter one of group-folder, e.g. "group".
+You can see three files named 'bench1.sh', 'bench2.sh' and 'bench3.sh'.
+Each of them is for testing whether you can pass 
+the corresponding benchmarks. For example, when we enter the group1 folder,
+and type 'sh bench1.sh', the screen will show how many benchmarks the solver can pass.
+
+You may notice there are five files: name1-5. Each of them is responsible
+for recording cnf names:
+- name1 lists all the sat cnf in bench1 
+- name2 lists all the unsat cnf in bench1
+- name3 lists all the sat cnf in bench2
+- name4 lists all the unsat cnf in bench2
+- name5 lists all the unsat cnf in bench3
+
+You should be able to run your tool with our benchmarks scripts and
+see all the tests passing, after changing only the lines of the "bench[#].sh"
+scripts that begin "python dpll.py" (that is, the lines that actually
+call the program.)  If you cannot, there is either a problem with the
+input/output of your tool, or your tools implementation.
+
+--------------------
+
+How to apply more benchmarks?
+
+1. Copy your solver in some group folder
+2. Use your solver's name to instead of the solver name in bench1.sh, 
+   bench2.sh and bench3.sh
+3. Run each script, then you can get the results
+
+If you want to add more cnf files:
+
+1. Put the cnf file in a certain sat or unsat folder
+2. Update the corresponding name file, e.g., name1, since the test script
+   will read the names from the file
+
+For example, if a new cnf file is named 'ccc' and it is satisfied. First, put it
+in the '/bench1/sat/' and then append 'ccc' to name1.

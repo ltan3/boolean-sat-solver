@@ -1,0 +1,177 @@
+# Notes by Lance Tan
+
+unitPropagate(clauses, variabes, dl) returns conflict (bool)
+allVarsAssigned(clauses, variables) returns yes/no
+pickBranchingVariable(clauses, variables) returns variable, value
+conflictAnalysis(clauses, variables) returns decision level to backtrack to
+backtrack(clause, variables, beta) backtracks to the first moment when the decision level was beta (undos all assignments with decision level beta or bigger)
+
+clauses: map {clause id : clause}
+variables: map {var id : var}
+dl: the "decision level", which is the current number of guesses we've made. A decision level is associated with each assignment of a value to a variable.
+
+Extensions:
+1. UIP Clausal learing
+2. Two watched literals - lazy evaluation of clause state
+3. Randomized restarts? pickBranchingVariable heuristic at this paper?:
+https://www.princeton.edu/~chaff/publication/DAC2001v56.pdf
+
+
+DPLL(clauses, variables) returns SAT or UNSAT
+	dl = 0
+	# Need a way to remember which variables are decision variables
+	decision_stack = (empty stack)
+	# len(decision_stack) == dl at all times
+
+	if unitPropagate(clauses, variables, dl) == CONFLICT
+		return UNSAT
+
+	while not allVariablesAssigned(clauses, variables):
+		x, v = pickBranchingVariable(clauses, variables)
+		dl += 1
+		assign x := v with decision level dl and antecedent nil
+		add (x, v) to the decision stack
+		(conflict, unsat_clause) = unitPropagate(clauses, variables, dl)
+		if there is conflict:
+			beta = conflictAnalysis(clauses, variables, dl, decision_stack)
+			# CLause learning: beta = conflictAnalysis(clauses, variables, dl, unsat_clause)
+			if beta < 0:
+				return UNSAT
+			else:
+				backtrack(clauses, variables, beta)
+				dl = beta
+
+	return SAT
+
+
+Clause:
+	id
+	variables and signs: a map {variable ids : sign in this clause} ?
+	state (sat, unsat, unit, unresolved)
+
+	Lazy evaluation of state: there is no harm in saying a clause is unresolved when it in fact is satisfied
+	Keep references to 2 different literals in the clause. Try to watch literals that are either unassigned or satisfied; watch an unsat literal if there aren't any other options.
+	# On init: pick any two literals to watch
+	# On variable assignment:
+	# 	If the newly assigned literal is being watched, and its new value causes the literal to be unsat:
+	# 		If there is another literal that isn't being watched, and is satisfied or unresolved:
+	# 			watch it
+	# 		Else:
+	# 			(this clause is unresolved, keep watching this unsatisfied literal)
+	# 		If the other literal being watched is unsat, then don't bother checking; this clause has just become unsatisfied
+	# 		# This means on a variable assignment, we need to update all the clauses that contain the variable
+
+	# To check the state of the clause:
+	# 	If at least one of the watched literals is satisified, the clause is satisfied
+	# 	If one of the watched literals is unsat and the other is unresolved, the clause is unit (if there were another unresolved variable, we would be watching it)
+	# 	If both watched literals are unsat, the clause is unsat (if there were any  unresolved literals, we would be watching them)
+	# 	If both watched literals are unresolved, then lazily say the clause is unresolved (it could be actually be satisfied by some literal we're not watching,  but don't bother checking)
+
+	On variable assignment: do nothing
+	To check state of clause:
+		Update literals you are watching:
+			If either of the literals being watched is unsat: Find another literal to watch that is sat or unresolved
+		Compute the status:
+			If at least one of the watched literals is satisified, the clause is satisfied
+	 		If one of the watched literals is unsat and the other is unresolved, the clause is unit (if there were another unresolved variable, we would be watching it)
+	 		If both watched literals are unsat, the clause is unsat (if there were any  unresolved literals, we would be watching them)
+	 		If both watched literals are unresolved, then lazily say the clause is unresolved (it could be actually be satisfied by some literal we're not watching, but don't bother checking)
+
+
+Variable:
+	id
+	clauses that it appeears in: set of clause ids? or map {clause id : sign in that clause}?
+	value (+1 = true, -1 = false, 0 = unassigned)
+	decision level (integer >0)
+	antecedent: the id of the unit clause that caused this variable to be assigned a variable, or nil if a decision variable or not assigned
+
+allVarsAssigned(clauses, variables) returns yes/no
+	return all(var.value != 0 for var in variables) # lazy evaluation of clause state
+
+pickBranchingVariable(clauses, variables) returns variable, value
+	pick a clause c that's unresolved 
+	pick a variable v in c.variables that isn't assigned to yet
+	return v, c.sign[v]
+	## What is the smarter way to to this? -> VISD heurstic 
+
+unitPropagate(clauses, variables, dl) returns (yes/no conflict, clause that is unsat)
+	-- If clauses are in a graph where two clauses are neighbors if they share variables in common, then this is the same as graph traversing from each unit clause.
+	-- DFS will discover conflicts more quickly?
+	# is it a problem that clauses change state while theyre in the stack?
+	put all unit clauses in a new stack
+	while the stack has items:
+		pop a clause c
+		if c is unit:
+			let (x,v) = the variable and sign in c that isn't assigned
+			assign x := v with decision level dl and antecedent c
+			for each clause c' (besides c) that contains x:
+				if c' is unit, add it to stack
+				if c' is unsat, stop and return (CONFLICT, c')
+
+	return (no conflict, nil)
+
+backtrack(clauses, variables, beta)
+	affected_clauses = set()
+	for each var in variables:
+		if var.decision_level > beta:
+			var.value = 0
+			affected_clauses.add(var.clauses)
+
+	for clause in affected_clauses:
+		update the clauses's status (or not, if doing lazy)
+
+
+conflictAnalysis(clauses, variables, dl, decision_stack):
+	# for now, just undo the last guess.
+	# Later, learn and add clauses here like the dpll paper says
+	pop (x, v) from the decision stack
+	# We know that assigning x := v creates a conflict, so can
+	# deduce x := -v (given the other guesses we've made so far).
+	assign x := -v with decision level dl - 1
+	return dl - 1
+
+Example from Lecture 19:
+Assign variable 1 := 1 with dl 0
+Assign var 2 := -1 with dl 0
+Guess var 3 should be true; add (3, 1) to the decision stack
+Increment dl = 1
+Assign var 3 := 1 with dl 1
+Assign var 4 := 1 with dl 1 ==> Conflict
+Backtrack:
+- undo everything with dl >= 1
+- set dl = 0
+- pop (3,1) off the decision stack
+- Assign var 3 := -1 with dl 0
+
+
+conflictAnalysis(clauses, variables, dl, unsat_clause): # with UIP clause learning
+	# i don't think this is correct/efficient, but this is the idea
+	i = 0
+	new_clause = copy of unsat_clause
+	n_curr_dl = len(var for var in new_clause if var.decision_level == dl)
+	queue = queue(signed variables in unsat_clause) # breadth first search
+	while queue is not empty:
+		pop a variable x from queue
+		There should be only one variable x such that either new_clause contains x and x.antecedent contains -x, or vice versa. (?)
+		for each signed variable x' in x.antecedent:
+			if x' is not in new_clause:
+				add it (resolution)
+				if decision level of x' == dl:
+					n_curr_dl += 1
+				add x' to back of queue
+			if x' is in new_clause:
+				if sign of x' in new_clause is opposite of sign of x' in x.antecedent:
+					remove x' from new_clause
+					if decision level of x' == dl:
+						n_curr_dl -= 1
+					(We should only ever get here once per antecedent)
+
+		if n_curr_dl == 1:
+			stop (found a UIP in the antecdent graph)
+
+	add the new_clause, we learned it
+	return beta = the max decision level of vars in new_clause besides dl (backtrack as far as possible while keeping this new clause unit)
+
+
+
+	
